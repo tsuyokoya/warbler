@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -29,6 +29,9 @@ connect_db(app)
 ##############################################################################
 # User signup/login/logout
 
+# before_request decorator creates a fxn that is run before each request
+# not required to return anything
+# ideal for use with the flask g object
 # g is an object provided by flask. Global namespace for holding any data
 
 
@@ -255,6 +258,51 @@ def delete_user():
     return redirect("/signup")
 
 
+@app.route("/users/add_like/<int:message_id>", methods=["POST"])
+def add_like(message_id):
+    """Like a user post."""
+
+    # check that the post is not yours
+    liked_message = Message.query.get(message_id)
+    liked_user_id = liked_message.user_id
+
+    # check that you haven't already like post
+    find_liked_message = Likes.query.filter_by(
+        message_id=message_id, user_id=session[CURR_USER_KEY]
+    ).first()
+
+    # if already liked, remove like
+    if find_liked_message:
+        Likes.query.filter_by(
+            message_id=message_id, user_id=session[CURR_USER_KEY]
+        ).delete()
+        db.session.commit()
+
+    # if not liked, add like if post is not yours
+    elif liked_user_id != session[CURR_USER_KEY]:
+        like = Likes(user_id=session[CURR_USER_KEY], message_id=message_id)
+        db.session.add(like)
+        db.session.commit()
+
+    return redirect("/")
+
+
+@app.route("/users/<int:user_id>/likes")
+def show_liked_messages(user_id):
+    """Show list of liked messages."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    liked_messages_collection = Likes.query.filter_by(user_id=user_id).all()
+    liked_messages = [
+        Message.query.get(like.message_id) for like in liked_messages_collection
+    ]
+    user = User.query.get(user_id)
+    return render_template("users/likes.html", messages=liked_messages, user=user)
+
+
 ##############################################################################
 # Messages routes:
 
@@ -321,7 +369,10 @@ def homepage():
         users_obj = [user for user in g.user.following]
         messages_collection = [user.messages for user in users_obj]
         messages = [message for obj in messages_collection for message in obj]
-        return render_template("home.html", messages=messages)
+
+        likes_collection = Likes.query.filter_by(user_id=session[CURR_USER_KEY]).all()
+        likes = [obj.message_id for obj in likes_collection]
+        return render_template("home.html", messages=messages, likes=likes)
 
     else:
         return render_template("home-anon.html")
