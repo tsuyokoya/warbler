@@ -2,3 +2,6 @@ Venv/
 __pycache__
 .DS_Store
 vscode/
+.env
+.flaskenv
+config.py
