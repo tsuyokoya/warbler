@@ -1,7 +1,7 @@
 """User View tests."""
 
 import os
-from unittest import TestCase
+from unittest import TestCase, main 
 
 from models import db, connect_db, Message, User
 
@@ -53,26 +53,31 @@ class UserViewTestCase(TestCase):
     def test_add_follow(self):
         """Can user follow another user?"""
 
-        with self.client as c:
-            with c.session_transaction() as sess:
-                sess[CURR_USER_KEY] = self.testuser_one.id
+        # app_context is needed for the correct functioning of sqlalchemy
+        # else client.post closes all sessions.
+        with app.app_context():
+            # signup already adds the user to db.session
             testuser_two = User.signup(
                 username="testuser2",
                 email="test2@test.com",
                 password="testuser2",
                 image_url=None,
             )
-            db.session.add(testuser_two)
+
             db.session.commit()
 
-            resp = c.post(f"/users/follow/{testuser_two.id}", follow_redirects=True)
+            with self.client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser_one.id
+
+            resp = self.client.post(
+                f"/users/follow/{testuser_two.id}", follow_redirects=True
+            )
             self.assertEqual(resp.status_code, 200)
             html = resp.get_data(as_text=True)
-            # self.assertIn(f"{testuser_two.username}", html) -- results in DetachedInstance Error
-            # sqlalchemy.orm.exc.DetachedInstanceError: Instance <User at 0x109e9d410> is not bound to a Session; attribute refresh operation cannot proceed
-            # (Background on this error at: http://sqlalche.me/e/bhk3)
-            self.assertIn("@testuser2", html)
 
+            self.assertIn(f"{testuser_two.username}", html)
+            self.assertIn("@testuser2", html)
+    
     def test_show_followers(self):
         """Can user stop following a user?"""
 
@@ -94,3 +99,6 @@ class UserViewTestCase(TestCase):
             # resp = c.post(
             #     f"/users/stop-following/{testuser_two.id}", follow_redirects=True
             # )
+
+if __name__ == "__main__":
+    main(verbosity=3)
