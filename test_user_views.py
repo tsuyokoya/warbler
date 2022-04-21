@@ -1,7 +1,7 @@
 """User View tests."""
 
 import os
-from unittest import TestCase, main 
+from unittest import TestCase, main
 
 from models import db, connect_db, Message, User
 
@@ -34,21 +34,25 @@ class UserViewTestCase(TestCase):
 
         db.session.commit()
 
-        # self.testuser_one.following.append(self.testuser_two)
-        # db.session.commit()
-
     def test_show_profile(self):
         """Can user see profile?"""
 
         with self.client as c:
+            # when not logged in
+            resp = c.get(f"/users/{self.testuser_one.id}", follow_redirects=True)
+            self.assertEqual(resp.status_code, 200)
+
+            html = resp.get_data(as_text=True)
+            self.assertIn("Access unauthorized.", html)
+
+            # when logged in
+            with self.client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser_one.id
             resp = c.get(f"/users/{self.testuser_one.id}")
             self.assertEqual(resp.status_code, 200)
 
             html = resp.get_data(as_text=True)
             self.assertIn(f"{self.testuser_one.username}", html)
-
-            # with c.session_transaction() as sess:
-            #     sess[CURR_USER_KEY] = self.testuser.id
 
     def test_add_follow(self):
         """Can user follow another user?"""
@@ -63,7 +67,6 @@ class UserViewTestCase(TestCase):
                 password="testuser2",
                 image_url=None,
             )
-
             db.session.commit()
 
             with self.client.session_transaction() as sess:
@@ -76,29 +79,36 @@ class UserViewTestCase(TestCase):
             html = resp.get_data(as_text=True)
 
             self.assertIn(f"{testuser_two.username}", html)
-            self.assertIn("@testuser2", html)
-    
-    def test_show_followers(self):
+
+    def test_remove_follow(self):
         """Can user stop following a user?"""
 
-        with self.client as c:
-            with c.session_transaction() as sess:
-                sess[CURR_USER_KEY] = self.testuser_one.id
+        with app.app_context():
             testuser_two = User.signup(
                 username="testuser2",
                 email="test2@test.com",
                 password="testuser2",
                 image_url=None,
             )
-            db.session.add(testuser_two)
             db.session.commit()
-            # need to add a testuser to follow first, then remove
 
-            # resp = c.post(f"/users/follow/{testuser_two.id}", follow_redirects=True)
+            with self.client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser_one.id
+            # add a testuser to follow
+            resp = self.client.post(
+                f"/users/follow/{testuser_two.id}", follow_redirects=True
+            )
+            self.assertEqual(resp.status_code, 200)
 
-            # resp = c.post(
-            #     f"/users/stop-following/{testuser_two.id}", follow_redirects=True
-            # )
+            # remove follow
+            resp = self.client.post(
+                f"/users/stop-following/{testuser_two.id}", follow_redirects=True
+            )
+            self.assertEqual(resp.status_code, 200)
+            html = resp.get_data(as_text=True)
+
+            self.assertNotIn(f"{testuser_two.username}", html)
+
 
 if __name__ == "__main__":
     main(verbosity=3)
