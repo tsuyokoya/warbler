@@ -11,28 +11,12 @@ CURR_USER_KEY = "curr_user"
 
 app = Flask(__name__)
 
-
 if app.config["ENV"] == "production":
     app.config.from_object("config.ProductionConfig")
 else:
     app.config.from_object("config.DevelopmentConfig")
 
-
-#! These are not needed now as the above two lines load the config from config.py
-
-
-# Get DB_URI from environ variable (useful for production/testing) or,
-# if not set there, use development local db.
-# app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-#     "DATABASE_URL", "postgresql:///warbler"
-# )
-
-# app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-# app.config["SQLALCHEMY_ECHO"] = False
-# app.config["DEBUG_TB_INTERCEPT_REDIRECTS"] = False
-# app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "it's a secret")
 toolbar = DebugToolbarExtension(app)
-
 connect_db(app)
 
 ##############################################################################
@@ -143,6 +127,10 @@ def list_users():
     Can take a 'q' param in querystring to search by that username.
     """
 
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
     search = request.args.get("q")
 
     # if no search param (press enter without anything typed), list all users
@@ -158,6 +146,10 @@ def list_users():
 @app.route("/users/<int:user_id>")
 def users_show(user_id):
     """Show user profile."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
 
     user = User.query.get_or_404(user_id)
 
